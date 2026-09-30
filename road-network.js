@@ -197,7 +197,21 @@ export function buildRoadNetwork(roads){
     nodes:[...nodes.values()],
     edges,
     turns,
-    junctions:[...nodes.values()].filter(n=>n.incoming.length+n.outgoing.length>2).map(n=>({
+    junctions:[...nodes.values()].filter((node)=>{
+      const neighborKeys=new Set();
+      for(const edgeId of node.incoming){
+        const edge=edgeById.get(edgeId);
+        if(edge) neighborKeys.add(edge.from);
+      }
+      for(const edgeId of node.outgoing){
+        const edge=edgeById.get(edgeId);
+        if(edge) neighborKeys.add(edge.to);
+      }
+      // A straight cell and a normal corner both have two physical
+      // neighbours. A real junction appears when 3+ neighbours meet, or
+      // when independently-created roads share the same node.
+      return neighborKeys.size>=3 || node.roadIds.length>1;
+    }).map(n=>({
       id:n.id,
       x:n.x,
       y:n.y,
