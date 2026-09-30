@@ -403,17 +403,6 @@ function drawLaneMarkings(road,junctionKeys){
   const half=spec.lanes*laneW/2;
   const edgeOffset=Math.max(0,half+3*zoom);
 
-  drawPolyline(points,Math.max(1,1.2*zoom),"#cad3da",{
-    lineCap:"butt",lineJoin:"round"
-  });
-  if(spec.lanes>1){
-    drawPolyline(points,Math.max(1,1.2*zoom),"#cad3da",{
-      lineCap:"butt",lineJoin:"round"
-    });
-    // Edge markings are rendered as segment lines below so future junction
-    // geometry can add gaps without changing the road centerline data.
-  }
-
   for(let i=1;i<spec.lanes;i++){
     const offset=-half+i*laneW;
     let color="#aeb8c1";
