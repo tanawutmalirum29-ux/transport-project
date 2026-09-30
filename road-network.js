@@ -176,7 +176,7 @@ export function buildRoadNetwork(roads){
       const incoming=edgeById.get(incomingId);
       for(const outgoingId of node.outgoing){
         const outgoing=edgeById.get(outgoingId);
-        if(!incoming || !outgoing || incoming.from===outgoing.to) continue;
+        if(!incoming || !outgoing) continue;
         const a=incoming.fromPoint,b=incoming.toPoint,c=outgoing.toPoint;
         const inDir=stepDirection(a,b),outDir=stepDirection(b,c);
         const dot=inDir.x*outDir.x+inDir.y*outDir.y;
@@ -208,9 +208,9 @@ export function buildRoadNetwork(roads){
         if(edge) neighborKeys.add(edge.to);
       }
       // A straight cell and a normal corner both have two physical
-      // neighbours. A real junction appears when 3+ neighbours meet, or
-      // when independently-created roads share the same node.
-      return neighborKeys.size>=3 || node.roadIds.length>1;
+      // neighbours. A real junction begins when 3+ physical approaches
+      // meet. Shared/overlapping road objects alone are not a junction. 
+      return neighborKeys.size>=3;
     }).map(n=>({
       id:n.id,
       x:n.x,
