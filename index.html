@@ -1,1 +1,59 @@
-<!doctype html><html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101722"><title>Transport Project — Map Prototype</title><link rel="stylesheet" href="styles.css"></head><body><div class="app-shell"><header class="topbar"><div class="brand"><span class="brand-mark">▦</span><div><strong>Transport Project</strong><span>Map Prototype</span></div></div><div class="top-status"><span class="status-dot"></span><span id="viewportLabel">กำลังเริ่มระบบ</span></div></header><main class="workspace"><aside class="sidebar"><section><p class="eyebrow">แผนที่</p><h1>World Map</h1><p class="muted">พื้นฐานสำหรับสร้างเกมขนส่งใหม่ เริ่มจากการวางแผนพื้นที่บนกริด</p></section><section class="panel"><div class="panel-title">เครื่องมือ</div><button class="tool active"><span>⌖</span> เลือกช่อง</button><button class="tool"><span>◫</span> ตรวจสอบพื้นที่</button></section><section class="panel stats"><div><span>ขนาดโลก</span><strong>120 × 80</strong></div><div><span>ช่องที่เลือก</span><strong id="selectedCell">—</strong></div><div><span>ระดับซูม</span><strong id="zoomValue">100%</strong></div></section><section class="panel"><div class="panel-title">การแสดงผล</div><label class="switch-row"><span>เส้นกริด</span><input id="gridToggle" type="checkbox" checked><i></i></label><label class="switch-row"><span>กริดหลัก</span><input id="majorToggle" type="checkbox" checked><i></i></label></section><div class="sidebar-footer">Prototype 01 · UI + Grid Map</div></aside><section class="map-area"><div class="map-toolbar"><div class="toolbar-group"><button id="zoomOut">−</button><button id="zoomFit">พอดีหน้าจอ</button><button id="zoomIn">+</button></div><div class="toolbar-hint">ลากเพื่อเลื่อน · ล้อเมาส์เพื่อซูม · แตะสองนิ้วเพื่อซูม</div><div class="coords" id="cursorCoords">X — · Y —</div></div><div class="map-stage" id="mapStage"><canvas id="mapCanvas"></canvas><div class="map-overlay"><span id="scaleLabel">100%</span><span>เลือกช่องบนแผนที่</span></div><div class="mobile-controls"><button id="mobileFit">พอดี</button><button id="mobileOut">−</button><button id="mobileIn">+</button></div></div></section></main></div><script type="module" src="game.js"></script></body></html>
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101722">
+<title>Transport Project — Map Prototype</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell">
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">▦</span>
+    <div><strong>Transport Project</strong><span>Map Prototype</span></div>
+  </div>
+  <div class="top-status"><span class="status-dot"></span><span id="viewportLabel">กำลังเริ่มระบบ</span></div>
+</header>
+<main class="workspace">
+  <aside class="sidebar">
+    <section>
+      <p class="eyebrow">แผนที่</p>
+      <h1>World Map</h1>
+      <p class="muted">พื้นที่กริดไม่มีขอบเขตสำหรับวางแผนโลกของเกมขนส่ง เริ่มจากระบบแผนที่ก่อน</p>
+    </section>
+    <section class="panel">
+      <div class="panel-title">เครื่องมือ</div>
+      <button class="tool active"><span>⌖</span> เลือกช่อง</button>
+      <button class="tool"><span>◫</span> ตรวจสอบพื้นที่</button>
+    </section>
+    <section class="panel stats">
+      <div><span>ขนาดโลก</span><strong>ไม่จำกัด</strong></div>
+      <div><span>ช่องที่เลือก</span><strong id="selectedCell">—</strong></div>
+      <div><span>ระดับซูม</span><strong id="zoomValue">100%</strong></div>
+    </section>
+    <section class="panel">
+      <div class="panel-title">การแสดงผล</div>
+      <label class="switch-row"><span>เส้นกริด</span><input id="gridToggle" type="checkbox" checked><i></i></label>
+      <label class="switch-row"><span>กริดหลัก</span><input id="majorToggle" type="checkbox" checked><i></i></label>
+    </section>
+    <div class="sidebar-footer">Prototype 01 · Infinite Grid Map</div>
+  </aside>
+  <section class="map-area">
+    <div class="map-toolbar">
+      <div class="toolbar-group"><button id="zoomOut">−</button><button id="zoomFit">ศูนย์กลาง</button><button id="zoomIn">+</button></div>
+      <div class="toolbar-hint">ลากเพื่อเลื่อน · ล้อเมาส์เพื่อซูม · แตะสองนิ้วเพื่อซูม</div>
+      <div class="coords" id="cursorCoords">X — · Y —</div>
+    </div>
+    <div class="map-stage" id="mapStage">
+      <canvas id="mapCanvas"></canvas>
+      <div class="map-overlay"><span id="scaleLabel">100%</span><span>กริดไม่มีขอบเขต</span></div>
+      <div class="mobile-controls"><button id="mobileFit">ศูนย์</button><button id="mobileOut">−</button><button id="mobileIn">+</button></div>
+    </div>
+  </section>
+</main>
+</div>
+<script type="module" src="game.js"></script>
+</body>
+</html>
