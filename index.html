@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#101722">
-<title>Transport Project — Map Prototype</title>
+<title>Transport Project — Road Prototype</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -12,44 +12,97 @@
 <header class="topbar">
   <div class="brand">
     <span class="brand-mark">▦</span>
-    <div><strong>Transport Project</strong><span>Map Prototype</span></div>
+    <div><strong>Transport Project</strong><span>Road &amp; Network Prototype</span></div>
   </div>
   <div class="top-status"><span class="status-dot"></span><span id="viewportLabel">กำลังเริ่มระบบ</span></div>
 </header>
+
 <main class="workspace">
   <aside class="sidebar">
     <section>
-      <p class="eyebrow">แผนที่</p>
-      <h1>World Map</h1>
-      <p class="muted">พื้นที่กริดไม่มีขอบเขตสำหรับวางแผนโลกของเกมขนส่ง เริ่มจากระบบแผนที่ก่อน</p>
+      <p class="eyebrow">โครงข่ายขนส่ง</p>
+      <h1>Road Builder</h1>
+      <p class="muted">สร้างถนนบนกริดด้วยข้อมูลโครงข่ายจริง รองรับเลน ทางเดียว ทางตัด ทางเลี้ยว และจุดเชื่อม เพื่อให้รถในอนาคตใช้งานต่อได้</p>
     </section>
+
     <section class="panel">
       <div class="panel-title">เครื่องมือ</div>
-      <button class="tool active"><span>⌖</span> เลือกช่อง</button>
-      <button class="tool"><span>◫</span> ตรวจสอบพื้นที่</button>
+      <button class="tool active" data-tool="select" id="toolSelect"><span>⌖</span> เลือก / เลื่อนแมพ</button>
+      <button class="tool" data-tool="road" id="toolRoad"><span>╱</span> สร้างถนน</button>
+      <button class="tool" data-tool="erase" id="toolErase"><span>⌫</span> ลบถนนทั้งเส้น</button>
     </section>
+
+    <section class="panel road-builder" id="roadBuilder">
+      <div class="panel-title">รูปแบบถนน</div>
+      <button class="road-type active" data-road-type="two-2"><span class="road-swatch two"></span><span><b>2 เลนสวนทาง</b><small>1 เลน / ทิศทาง</small></span></button>
+      <button class="road-type" data-road-type="two-4"><span class="road-swatch four"></span><span><b>4 เลนสวนทาง</b><small>2 เลน / ทิศทาง</small></span></button>
+      <button class="road-type" data-road-type="one-1"><span class="road-swatch one"></span><span><b>ทางเดียว 1 เลน</b><small>รถไปทางเดียว</small></span></button>
+      <button class="road-type" data-road-type="one-2"><span class="road-swatch one"></span><span><b>ทางเดียว 2 เลน</b><small>สองเลนทิศเดียว</small></span></button>
+      <button class="road-type" data-road-type="one-3"><span class="road-swatch one"></span><span><b>ทางเดียว 3 เลน</b><small>สามเลนทิศเดียว</small></span></button>
+      <div class="road-status" id="roadStatus">เลือกจุดแรกเพื่อเริ่มสร้างถนน</div>
+      <button class="finish-road" id="finishRoad">จบเส้นทาง</button>
+    </section>
+
     <section class="panel stats">
       <div><span>ขนาดโลก</span><strong>ไม่จำกัด</strong></div>
       <div><span>ช่องที่เลือก</span><strong id="selectedCell">—</strong></div>
+      <div><span>ถนน</span><strong id="roadCount">0</strong></div>
+      <div><span>ช่วงถนน</span><strong id="segmentCount">0</strong></div>
+      <div><span>จุดแยก</span><strong id="junctionCount">0</strong></div>
       <div><span>ระดับซูม</span><strong id="zoomValue">100%</strong></div>
     </section>
+
     <section class="panel">
       <div class="panel-title">การแสดงผล</div>
       <label class="switch-row"><span>เส้นกริด</span><input id="gridToggle" type="checkbox" checked><i></i></label>
       <label class="switch-row"><span>กริดหลัก</span><input id="majorToggle" type="checkbox" checked><i></i></label>
     </section>
-    <div class="sidebar-footer">Prototype 01 · Infinite Grid Map</div>
+
+    <div class="sidebar-footer">Prototype 02 · Road Network Foundation</div>
   </aside>
+
   <section class="map-area">
     <div class="map-toolbar">
-      <div class="toolbar-group"><button id="zoomOut">−</button><button id="zoomFit">ศูนย์กลาง</button><button id="zoomIn">+</button></div>
-      <div class="toolbar-hint">ลากเพื่อเลื่อน · ล้อเมาส์เพื่อซูม · แตะสองนิ้วเพื่อซูม</div>
+      <div class="toolbar-group">
+        <button id="zoomOut" aria-label="ซูมออก">−</button>
+        <button id="zoomFit">ศูนย์กลาง</button>
+        <button id="zoomIn" aria-label="ซูมเข้า">+</button>
+      </div>
+      <div class="toolbar-hint" id="toolbarHint">เลือก / เลื่อนแมพ · สร้างถนนด้วยการแตะจุดต่อจุด · เส้นจะหักมุมอัตโนมัติ</div>
       <div class="coords" id="cursorCoords">X — · Y —</div>
     </div>
+
     <div class="map-stage" id="mapStage">
-      <canvas id="mapCanvas"></canvas>
-      <div class="map-overlay"><span id="scaleLabel">100%</span><span>กริดไม่มีขอบเขต</span></div>
-      <div class="mobile-controls"><button id="mobileFit">ศูนย์</button><button id="mobileOut">−</button><button id="mobileIn">+</button></div>
+      <canvas id="mapCanvas" aria-label="แผนที่กริดและถนน"></canvas>
+      <div class="map-overlay">
+        <span id="scaleLabel">100%</span>
+        <span id="modeLabel">เลือก / เลื่อน</span>
+        <span id="mapMessage">กริดไม่มีขอบเขต</span>
+      </div>
+
+      <div class="mobile-dock" id="mobileDock">
+        <button class="mobile-tool active" data-tool="select">⌖</button>
+        <button class="mobile-tool" data-tool="road">ถนน</button>
+        <button class="mobile-tool" data-tool="erase">ลบ</button>
+      </div>
+
+      <div class="mobile-road-panel" id="mobileRoadPanel">
+        <div class="mobile-road-types">
+          <button class="road-type active" data-road-type="two-2">2 เลน</button>
+          <button class="road-type" data-road-type="two-4">4 เลน</button>
+          <button class="road-type" data-road-type="one-1">1W</button>
+          <button class="road-type" data-road-type="one-2">2W</button>
+          <button class="road-type" data-road-type="one-3">3W</button>
+        </div>
+        <div class="mobile-road-status" id="mobileRoadStatus">แตะจุดแรกเพื่อเริ่ม · แตะจุดต่อไปเพื่อสร้างช่วงถนน · เสร็จแล้วกดจบ</div>
+        <button id="mobileFinishRoad">จบ</button>
+      </div>
+
+      <div class="mobile-controls">
+        <button id="mobileFit">ศูนย์</button>
+        <button id="mobileOut">−</button>
+        <button id="mobileIn">+</button>
+      </div>
     </div>
   </section>
 </main>
