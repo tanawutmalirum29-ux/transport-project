@@ -8,6 +8,12 @@ import {
   buildRoadNetwork,
   findRoadAtPoint
 } from "./road-network.js";
+import {
+  buildSmoothCenterline,
+  offsetPolyline,
+  polylineLength,
+  pointAlongPolyline
+} from "./road-geometry.js";
 
 const CELL=48;
 const LANE_WIDTH=10;
@@ -33,7 +39,6 @@ const mobileFinishRoad=document.querySelector("#mobileFinishRoad");
 const roadCount=document.querySelector("#roadCount");
 const segmentCount=document.querySelector("#segmentCount");
 const junctionCount=document.querySelector("#junctionCount");
-const mapStage=document.querySelector("#mapStage");
 
 let dpr=1;
 let zoom=1;
@@ -81,16 +86,13 @@ function cellFromScreen(x,y){
   return cellFromWorld(screenToWorld(x,y));
 }
 
-function isFinitePoint(p){
-  return Number.isFinite(p.x)&&Number.isFinite(p.y);
-}
-
 function loadRoads(){
   try{
     const raw=localStorage.getItem(ROAD_STORAGE_KEY);
     if(!raw) return;
     const data=JSON.parse(raw);
     if(!Array.isArray(data)) return;
+
     roads=data.map((r)=>{
       if(!r||!Array.isArray(r.path)||r.path.length<2) return null;
       const spec=ROAD_SPECS[r.type]||ROAD_SPECS["two-2"];
@@ -124,7 +126,20 @@ function roadSpec(road){
 }
 
 function roadWidthPx(road){
-  return roadSpec(road).lanes*LANE_WIDTH*zoom+6*zoom;
+  return roadSpec(road).lanes*LANE_WIDTH*zoom+8*zoom;
+}
+
+function laneWorldOffsets(road){
+  const spec=roadSpec(road);
+  const laneW=LANE_WIDTH*zoom;
+  const half=spec.lanes*laneW/2;
+  return Array.from({length:spec.lanes},(_,i)=>-half+(i+0.5)*laneW);
+}
+
+function roadCenterline(road,pathOverride=null){
+  const path=pathOverride||road.path;
+  const points=(path||[]).map(worldCellToScreen);
+  return buildSmoothCenterline(points,CELL*zoom*0.34,9);
 }
 
 function updateStats(){
@@ -142,6 +157,7 @@ function updateRoadStatus(){
   const text=buildingPath.length
     ? "กำลังวางจาก "+formatPoint(buildingPath[buildingPath.length-1])+" · แตะจุดต่อไปเพื่อสร้างช่วง · กดจบเมื่อเสร็จ"
     : "เลือกจุดแรกเพื่อเริ่มสร้างถนน";
+
   roadStatus.textContent=text;
   mobileRoadStatus.textContent=buildingPath.length
     ? "ต่อจาก "+formatPoint(buildingPath[buildingPath.length-1])+" · แตะจุดต่อไป · กดจบ"
@@ -149,14 +165,11 @@ function updateRoadStatus(){
 }
 
 function updateModeUI(){
-  const names={
-    select:"เลือก / เลื่อน",
-    road:"สร้างถนน",
-    erase:"ลบถนน"
-  };
+  const names={select:"เลือก / เลื่อน",road:"สร้างถนน",erase:"ลบถนน"};
   modeLabel.textContent=names[activeTool];
-  mapStage.classList.toggle("road-mode",activeTool==="road");
-  mapStage.classList.toggle("erase-mode",activeTool==="erase");
+
+  document.querySelector("#mapStage").classList.toggle("road-mode",activeTool==="road");
+  document.querySelector("#mapStage").classList.toggle("erase-mode",activeTool==="erase");
   roadBuilder.classList.toggle("active-builder",activeTool==="road");
   mobileRoadPanel.classList.toggle("visible",activeTool==="road");
 
@@ -167,13 +180,10 @@ function updateModeUI(){
     button.classList.toggle("active",button.dataset.tool===activeTool);
   });
 
-  if(activeTool==="select"){
-    mapMessage.textContent="กริดไม่มีขอบเขต";
-  }else if(activeTool==="road"){
-    mapMessage.textContent="สร้างถนน: แตะทีละจุด · รองรับทางเลี้ยวและการต่อแยก";
-  }else{
-    mapMessage.textContent="คลิก/แตะบนถนนเพื่อลบทั้งเส้น";
-  }
+  if(activeTool==="select") mapMessage.textContent="กริดไม่มีขอบเขต";
+  else if(activeTool==="road") mapMessage.textContent="สร้างถนน: ทางเลี้ยวจะโค้งต่อเนื่องและเชื่อมกับ junction";
+  else mapMessage.textContent="คลิก/แตะบนถนนเพื่อลบทั้งเส้น";
+
   updateRoadStatus();
   draw();
 }
@@ -196,9 +206,11 @@ function setRoadType(type){
 
 function finishBuilding(){
   if(activeTool!=="road") return;
+
   if(buildingPath.length>=2){
     const spec=ROAD_SPECS[selectedRoadType];
     const path=normalizePath(buildingPath);
+
     if(path.length>=2){
       const signature=path.map(pointKey).join("|");
       const reverse=spec.oneWay ? "" : [...path].reverse().map(pointKey).join("|");
@@ -207,12 +219,14 @@ function finishBuilding(){
         const sig=(road.path||[]).map(pointKey).join("|");
         return sig===signature||(reverse&&sig===reverse);
       });
+
       if(!duplicate){
         roads.push(createRoad(newRoadId(),spec.id,path));
         saveRoads();
       }
     }
   }
+
   buildingPath=[];
   selectedRoadId=null;
   updateStats();
@@ -230,7 +244,8 @@ function cancelBuilding(){
 
 function addRoadPoint(p){
   const point={x:Math.trunc(p.x),y:Math.trunc(p.y)};
-  if(!isFinitePoint(point)) return;
+  if(!Number.isFinite(point.x)||!Number.isFinite(point.y)) return;
+
   if(!buildingPath.length){
     buildingPath=[point];
     updateRoadStatus();
@@ -243,6 +258,7 @@ function addRoadPoint(p){
 
   const route=expandOrthogonal(last,point);
   for(let i=1;i<route.length;i++) buildingPath.push(route[i]);
+
   selected=null;
   selectedRoadId=null;
   updateRoadStatus();
@@ -252,11 +268,12 @@ function addRoadPoint(p){
 function eraseRoadAt(p){
   const road=findRoadAtPoint(roads,p);
   if(!road) return false;
+
   roads=roads.filter((item)=>item.id!==road.id);
   if(selectedRoadId===road.id) selectedRoadId=null;
   saveRoads();
   updateStats();
-  mapMessage.textContent="ลบ "+(roadSpec(road).label)+" แล้ว";
+  mapMessage.textContent="ลบ "+roadSpec(road).label+" แล้ว";
   draw();
   return true;
 }
@@ -314,30 +331,26 @@ function visibleRange(){
 
 function visibleRoad(road){
   if(!road.path?.length) return false;
-  const s=bounds();
   const range=visibleRange();
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+
   for(const p of road.path){
     minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);
     minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);
   }
-  const pad=Math.max(1,Math.ceil((roadSpec(road).lanes*LANE_WIDTH+8)/CELL));
-  return maxX>=range.sx-pad&&minX<=range.ex+pad&&maxY>=range.sy-pad&&minY<=range.ey+pad&&s.w>0&&s.h>0;
-}
 
-function screenPoints(path){
-  return path.map(worldCellToScreen);
+  const pad=Math.max(1,Math.ceil((roadSpec(road).lanes*LANE_WIDTH+12)/CELL));
+  return maxX>=range.sx-pad&&minX<=range.ex+pad&&maxY>=range.sy-pad&&minY<=range.ey+pad;
 }
 
 function drawPolyline(points,width,strokeStyle,options={}){
   if(points.length<2) return;
   ctx.save();
   ctx.strokeStyle=strokeStyle;
-  ctx.lineWidth=Math.max(.5,width);
+  ctx.lineWidth=Math.max(0.5,width);
   ctx.lineCap=options.lineCap||"round";
   ctx.lineJoin=options.lineJoin||"round";
-  if(options.dash) ctx.setLineDash(options.dash);
-  else ctx.setLineDash([]);
+  ctx.setLineDash(options.dash||[]);
   ctx.beginPath();
   ctx.moveTo(points[0].x,points[0].y);
   for(let i=1;i<points.length;i++) ctx.lineTo(points[i].x,points[i].y);
@@ -345,151 +358,119 @@ function drawPolyline(points,width,strokeStyle,options={}){
   ctx.restore();
 }
 
-function segmentNormal(a,b){
-  const dx=b.x-a.x;
-  const dy=b.y-a.y;
-  const length=Math.hypot(dx,dy)||1;
-  return {x:-dy/length,y:dx/length};
-}
-
-function drawSegmentMark(a,b,offset,width,strokeStyle,dash){
-  const normal=segmentNormal(a,b);
-  const ox=normal.x*offset;
-  const oy=normal.y*offset;
-  ctx.save();
-  ctx.strokeStyle=strokeStyle;
-  ctx.lineWidth=Math.max(.6,width);
-  ctx.lineCap="butt";
-  ctx.lineJoin="miter";
-  ctx.setLineDash(dash||[]);
-  ctx.beginPath();
-  ctx.moveTo(a.x+ox,a.y+oy);
-  ctx.lineTo(b.x+ox,b.y+oy);
-  ctx.stroke();
-  ctx.restore();
-}
-
 function drawRoadBed(road){
   if(!visibleRoad(road)) return;
-  const points=screenPoints(road.path);
+  const points=roadCenterline(road);
   const width=roadWidthPx(road);
 
-  drawPolyline(points,width+4*zoom,"#13191f",{lineCap:"round",lineJoin:"round"});
-  drawPolyline(points,width,"#303a43",{lineCap:"round",lineJoin:"round"});
+  drawPolyline(points,width+6*zoom,"#11171d",{});
+  drawPolyline(points,width+2*zoom,"#59616a",{});
+  drawPolyline(points,width,"#343c44",{});
 
-  if(road.lanes>=3) drawPolyline(points,width-8*zoom,"#343e47",{lineCap:"round",lineJoin:"round"});
+  // Slightly darker inner asphalt makes the carriageway read as a surface
+  // rather than a single flat line, especially on large displays.
+  drawPolyline(points,Math.max(1,width-4*zoom),"#303840",{});
 }
 
-function drawJunctions(net){
+function drawJunctionPatches(net){
   for(const junction of net.junctions){
     const roadsHere=roads.filter((road)=>junction.roadIds.includes(road.id));
     if(!roadsHere.length) continue;
-    const radius=Math.max(...roadsHere.map((road)=>roadWidthPx(road)/2))+2*zoom;
+
+    const radius=Math.max(...roadsHere.map((road)=>roadWidthPx(road)/2))+9*zoom;
     const p=worldCellToScreen(junction);
+
+    ctx.save();
+    ctx.fillStyle="#10161b";
     ctx.beginPath();
-    ctx.fillStyle="#303a43";
+    ctx.arc(p.x,p.y,radius+3*zoom,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle="#343c44";
+    ctx.beginPath();
     ctx.arc(p.x,p.y,radius,0,Math.PI*2);
     ctx.fill();
+    ctx.restore();
   }
 }
 
-function drawLaneMarkings(road,junctionKeys){
-  if(!visibleRoad(road)) return;
-  const spec=roadSpec(road);
-  const points=screenPoints(road.path);
+function drawLaneLine(points,offset,width,color,dash){
   if(points.length<2) return;
+  drawPolyline(offsetPolyline(points,offset),width,color,{lineCap:"butt",lineJoin:"round",dash});
+}
+
+function drawLaneMarkings(road){
+  if(!visibleRoad(road)) return;
+
+  const spec=roadSpec(road);
+  const centerline=roadCenterline(road);
+  const laneW=LANE_WIDTH*zoom;
+  const half=spec.lanes*laneW/2;
+  const edgeOffset=Math.max(0,half-1.8*zoom);
+  const dash=[Math.max(3,8*zoom),Math.max(4,11*zoom)];
+
+  drawLaneLine(centerline,-edgeOffset,Math.max(0.8,1.15*zoom),"#d6dde2",[]);
+  drawLaneLine(centerline,edgeOffset,Math.max(0.8,1.15*zoom),"#d6dde2",[]);
+
+  if(spec.oneWay){
+    for(let i=1;i<spec.lanes;i++){
+      const offset=-half+i*laneW;
+      drawLaneLine(centerline,offset,Math.max(0.8,1*zoom),"#b8c1c8",dash);
+    }
+  }else{
+    for(let i=1;i<spec.lanes;i++){
+      const offset=-half+i*laneW;
+
+      if(spec.lanes===2){
+        // One solid double-yellow centerline is the separator between
+        // opposing traffic directions.
+        drawLaneLine(centerline,offset,Math.max(1,1.15*zoom),"#e6bf52",[]);
+      }else if(i===spec.lanes/2){
+        // Wider divided road: two closely spaced yellow center lines.
+        drawLaneLine(centerline,offset-1.35*zoom,Math.max(0.9,1*zoom),"#e6bf52",[]);
+        drawLaneLine(centerline,offset+1.35*zoom,Math.max(0.9,1*zoom),"#e6bf52",[]);
+      }else{
+        drawLaneLine(centerline,offset,Math.max(0.8,1*zoom),"#b8c1c8",dash);
+      }
+    }
+  }
+
+  if(spec.oneWay) drawDirectionArrows(road,centerline);
+}
+
+function drawDirectionArrows(road,centerline){
+  const spec=roadSpec(road);
+  if(zoom<0.22||centerline.length<2) return;
 
   const laneW=LANE_WIDTH*zoom;
   const half=spec.lanes*laneW/2;
-  const edgeOffset=Math.max(0,half+3*zoom);
+  const spacing=clamp(170*zoom,48,220);
 
-  for(let i=1;i<spec.lanes;i++){
-    const offset=-half+i*laneW;
-    let color="#aeb8c1";
-    let width=Math.max(1,1.1*zoom);
-    let dash=[Math.max(2,7*zoom),Math.max(3,9*zoom)];
+  for(let lane=0;lane<spec.lanes;lane++){
+    const offset=-half+(lane+0.5)*laneW;
+    const line=offsetPolyline(centerline,offset);
+    const total=polylineLength(line);
+    const start=Math.min(spacing*.6,total*.25);
 
-    if(!spec.oneWay&&i===spec.lanes/2){
-      color="#e8c35b";
-      if(spec.lanes>=4){
-        width=Math.max(1,1.3*zoom);
-        dash=[];
-        drawOffsetSeparatedCenter(points,offset,2.2*zoom,color,width,junctionKeys);
-        continue;
-      }
+    for(let d=start;d<total;d+=spacing){
+      const at=pointAlongPolyline(line,d);
+      if(!at) continue;
+
+      const size=clamp(5.5*zoom,3.5,9);
+      const ux=at.dir.x,uy=at.dir.y;
+      const px=-uy,py=ux;
+      const p=at.point;
+
+      ctx.save();
+      ctx.fillStyle="#dce3e7";
+      ctx.beginPath();
+      ctx.moveTo(p.x+ux*size*1.5,p.y+uy*size*1.5);
+      ctx.lineTo(p.x-ux*size+px*size*.72,p.y-uy*size+py*size*.72);
+      ctx.lineTo(p.x-ux*size-px*size*.72,p.y-uy*size-py*size*.72);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
     }
-    drawOffsetSegments(points,offset,width,color,dash,junctionKeys);
-  }
-
-  drawOffsetSegments(points,-edgeOffset,Math.max(.8,1*zoom),"#d5dde2",[],junctionKeys,true);
-  drawOffsetSegments(points,edgeOffset,Math.max(.8,1*zoom),"#d5dde2",[],junctionKeys,true);
-
-  if(spec.oneWay) drawDirectionArrows(road,points);
-}
-
-function drawOffsetSegments(points,offset,width,color,dash,junctionKeys,edge=false){
-  for(let i=0;i<points.length-1;i++){
-    const cellA=roadsPointForIndex(points,i);
-    const cellB=roadsPointForIndex(points,i+1);
-    let a={...points[i]},b={...points[i+1]};
-    const nodeA=junctionKeys.has(pointKey(cellA));
-    const nodeB=junctionKeys.has(pointKey(cellB));
-    const dx=b.x-a.x,dy=b.y-a.y;
-    const len=Math.hypot(dx,dy)||1;
-    const gap=Math.min(len*.26,Math.max(2,7*zoom));
-    const ux=dx/len,uy=dy/len;
-
-    if(nodeA){a.x+=ux*gap;a.y+=uy*gap}
-    if(nodeB){b.x-=ux*gap;b.y-=uy*gap}
-    if(Math.hypot(b.x-a.x,b.y-a.y)<1) continue;
-    drawSegmentMark(a,b,offset,width,color,dash);
-  }
-}
-
-function roadsPointForIndex(screenPts,index){
-  const source=screenPts===undefined?null:screenPts;
-  if(source===null) return {x:0,y:0};
-  return screenToGridForScreenPoint(source[index]);
-}
-
-function screenToGridForScreenPoint(p){
-  const w=screenToWorld(p.x,p.y);
-  return {x:Math.floor(w.x/CELL),y:Math.floor(w.y/CELL)};
-}
-
-function drawOffsetSeparatedCenter(points,offset,separation,color,width,junctionKeys){
-  drawOffsetSegments(points,offset-separation,width,color,[],junctionKeys);
-  drawOffsetSegments(points,offset+separation,width,color,[],junctionKeys);
-}
-
-function drawDirectionArrows(road,points){
-  if(points.length<2||zoom<.09) return;
-  const segmentCount=points.length-1;
-  const stride=Math.max(1,Math.round(6));
-  let indexes=[];
-  for(let i=0;i<segmentCount;i+=stride) indexes.push(i);
-  if(indexes.length===0) indexes=[0];
-  if(segmentCount>4){
-    const last=Math.floor((segmentCount-1)/2);
-    if(!indexes.includes(last)) indexes.push(last);
-  }
-  for(const i of indexes){
-    const a=points[i],b=points[i+1];
-    const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
-    if(len<8*zoom) continue;
-    const ux=dx/len,uy=dy/len;
-    const px=-uy,py=ux;
-    const cx=(a.x+b.x)/2,cy=(a.y+b.y)/2;
-    const size=Math.max(3.5,5*zoom);
-    ctx.save();
-    ctx.fillStyle="#d9e0e5";
-    ctx.beginPath();
-    ctx.moveTo(cx+ux*size*1.4,cy+uy*size*1.4);
-    ctx.lineTo(cx-ux*size+px*size*.72,cy-uy*size+py*size*.72);
-    ctx.lineTo(cx-ux*size-px*size*.72,cy-uy*size-py*size*.72);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
   }
 }
 
@@ -497,23 +478,40 @@ function buildJunctionKeySet(net){
   return new Set(net.junctions.map((j)=>pointKey(j)));
 }
 
+function drawSelectedRoad(){
+  if(!selectedRoadId) return;
+  const road=roads.find((item)=>item.id===selectedRoadId);
+  if(!road||!visibleRoad(road)) return;
+  drawPolyline(roadCenterline(road),roadWidthPx(road)+9*zoom,"#61d3a54d",{});
+}
+
 function drawPreview(){
   if(activeTool!=="road"||buildingPath.length===0) return;
+
   let preview=buildingPath;
   if(hover){
     const last=buildingPath[buildingPath.length-1];
-    if(last.x!==hover.x||last.y!==hover.y) preview=buildingPath.concat(expandOrthogonal(last,hover).slice(1));
+    if(last.x!==hover.x||last.y!==hover.y){
+      preview=buildingPath.concat(expandOrthogonal(last,hover).slice(1));
+    }
   }
-  const points=screenPoints(preview);
-  drawPolyline(points,8*zoom,"#5ce1b566",{lineCap:"round",lineJoin:"round",dash:[8*zoom,7*zoom].map((v)=>Math.max(2,v))});
+
+  const spec=ROAD_SPECS[selectedRoadType];
+  const centerline=roadCenterline({path:preview,type:spec.id,lanes:spec.lanes,oneWay:spec.oneWay});
+  const width=spec.lanes*LANE_WIDTH*zoom+8*zoom;
+
+  drawPolyline(centerline,width+5*zoom,"#0f171d",{});
+  drawPolyline(centerline,width,"#5fe0b0aa",{dash:[9*zoom,7*zoom].map((v)=>Math.max(3,v))});
+
   const start=worldCellToScreen(buildingPath[0]);
   ctx.save();
-  ctx.fillStyle="#8ff0c9";
-  ctx.strokeStyle="#12362c";
+  ctx.fillStyle="#9af4d0";
+  ctx.strokeStyle="#14372e";
   ctx.lineWidth=Math.max(1,1.5*zoom);
   ctx.beginPath();
   ctx.arc(start.x,start.y,Math.max(4,5*zoom),0,Math.PI*2);
-  ctx.fill();ctx.stroke();
+  ctx.fill();
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -531,17 +529,20 @@ function draw(){
     let gridEvery=1;
     if(step<2) gridEvery=5;
     else if(step<4) gridEvery=2;
+
     ctx.strokeStyle="#22303a";
     ctx.lineWidth=1;
     ctx.beginPath();
+
     const startX=Math.ceil(range.sx/gridEvery)*gridEvery;
     const startY=Math.ceil(range.sy/gridEvery)*gridEvery;
+
     for(let x=startX;x<=range.ex+1;x+=gridEvery){
-      const px=Math.round(camera.x+(x)*step)+.5;
+      const px=Math.round(camera.x+x*step)+.5;
       ctx.moveTo(px,0);ctx.lineTo(px,s.h);
     }
     for(let y=startY;y<=range.ey+1;y+=gridEvery){
-      const py=Math.round(camera.y+(y)*step)+.5;
+      const py=Math.round(camera.y+y*step)+.5;
       ctx.moveTo(0,py);ctx.lineTo(s.w,py);
     }
     ctx.stroke();
@@ -551,8 +552,10 @@ function draw(){
     ctx.strokeStyle="#354650";
     ctx.lineWidth=1;
     ctx.beginPath();
+
     const firstX=Math.ceil(range.sx/10)*10;
     const firstY=Math.ceil(range.sy/10)*10;
+
     for(let x=firstX;x<=range.ex+1;x+=10){
       const px=Math.round(camera.x+x*step)+.5;
       ctx.moveTo(px,0);ctx.lineTo(px,s.h);
@@ -575,19 +578,11 @@ function draw(){
   ctx.stroke();
 
   const net=network();
-  const junctionKeys=buildJunctionKeySet(net);
 
   roads.forEach(drawRoadBed);
-  drawJunctions(net);
-
-  if(selectedRoadId){
-    const selectedRoad=roads.find((road)=>road.id===selectedRoadId);
-    if(selectedRoad&&visibleRoad(selectedRoad)){
-      drawPolyline(screenPoints(selectedRoad.path),roadWidthPx(selectedRoad)+7*zoom,"#61d3a544",{});
-    }
-  }
-
-  roads.forEach((road)=>drawLaneMarkings(road,junctionKeys));
+  roads.forEach(drawLaneMarkings);
+  drawJunctionPatches(net);
+  drawSelectedRoad();
 
   if(hover){
     const hp=worldCellToScreen(hover);
@@ -710,16 +705,19 @@ canvas.addEventListener("pointerdown",pointerDown);
 canvas.addEventListener("pointermove",pointerMove);
 canvas.addEventListener("pointerup",pointerUp);
 canvas.addEventListener("pointercancel",pointerUp);
+
 canvas.addEventListener("wheel",(e)=>{
   e.preventDefault();
   const p=pos(e);
   zoomAt(e.deltaY<0?1.12:.89,p.x,p.y);
 },{passive:false});
+
 canvas.addEventListener("contextmenu",(e)=>e.preventDefault());
 
 document.querySelectorAll("[data-tool]").forEach((button)=>{
   button.addEventListener("click",()=>setTool(button.dataset.tool));
 });
+
 document.querySelectorAll("[data-road-type]").forEach((button)=>{
   button.addEventListener("click",()=>setRoadType(button.dataset.roadType));
 });
@@ -732,8 +730,16 @@ document.addEventListener("keydown",(e)=>{
   if(e.key==="Enter"&&activeTool==="road") finishBuilding();
 });
 
-document.querySelector("#zoomIn").onclick=()=>{const s=bounds();zoomAt(1.2,s.w/2,s.h/2)};
-document.querySelector("#zoomOut").onclick=()=>{const s=bounds();zoomAt(.833,s.w/2,s.h/2)};
+document.querySelector("#zoomIn").onclick=()=>{
+  const s=bounds();
+  zoomAt(1.2,s.w/2,s.h/2);
+};
+
+document.querySelector("#zoomOut").onclick=()=>{
+  const s=bounds();
+  zoomAt(.833,s.w/2,s.h/2);
+};
+
 document.querySelector("#zoomFit").onclick=centerView;
 document.querySelector("#mobileIn").onclick=()=>document.querySelector("#zoomIn").click();
 document.querySelector("#mobileOut").onclick=()=>document.querySelector("#zoomOut").click();
