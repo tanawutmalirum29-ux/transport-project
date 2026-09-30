@@ -134,6 +134,7 @@ export function buildRoadNetwork(roads){
         fromPoint:{...from},
         toPoint:{...to},
         laneCount:lanes,
+        laneIds:Array.from({length:lanes},(_,laneIndex)=>laneIndex),
         roadIds:[road.id],
         roadTypes:[road.type]
       };
